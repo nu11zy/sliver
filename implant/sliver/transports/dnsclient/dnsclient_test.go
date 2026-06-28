@@ -137,6 +137,22 @@ func TestSplitBufferBase32(t *testing.T) {
 	}
 }
 
+func TestSplitBufferParityRegression(t *testing.T) {
+	// Sweep parent domain lengths across 8 chars to cover the full base32 group
+	// period. The varint-boundary bug surfaces when msg.Data length crosses 128
+	// bytes: the proto varint grows from 1 to 2 bytes, causing a +3/+4 base32
+	// jump that exceeds the subdataSpace-1 guard in SplitBuffer.
+	base := "example.com"
+	for pad := 0; pad < 8; pad++ {
+		parent := fmt.Sprintf(".%s%s.", strings.Repeat("x", pad), base)
+		client := NewDNSClient(parent, opts)
+		testData := randomData(256) // crosses the 128-byte Data varint boundary
+		t.Run(fmt.Sprintf("parentLen%d", len(parent)), func(t *testing.T) {
+			clientSplitBuffer(t, client, encoders.Base32{}, testData)
+		})
+	}
+}
+
 func TestSplitBufferDomainConstraints(t *testing.T) {
 	client := NewDNSClient(parent1, opts)
 	testData := randomData(8192)

